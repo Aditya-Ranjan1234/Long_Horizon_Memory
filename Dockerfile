@@ -1,84 +1,40 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
-#
-# This source code is licensed under the BSD-style license found in the
-# LICENSE file in the root directory of this source tree.
-
-# Multi-stage build using openenv-base
-# This Dockerfile is flexible and works for both:
-# - In-repo environments (with local OpenEnv sources)
-# - Standalone environments (with openenv from PyPI/Git)
-# The build script (openenv build) handles context detection and sets appropriate build args.
 
 ARG BASE_IMAGE=ghcr.io/meta-pytorch/openenv-base:latest
-FROM ${BASE_IMAGE} AS builder
+FROM ${BASE_IMAGE}
 
+# Set the working directory to /app
 WORKDIR /app
 
 # Ensure git is available (required for installing dependencies from VCS)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends git && \
+    apt-get install -y --no-install-recommends git curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Build argument to control whether we're building standalone or in-repo
-ARG BUILD_MODE=in-repo
-ARG ENV_NAME=long_horizon_memory
+# Copy the entire project into the container
+COPY . /app/
 
-# Copy environment code (always at root of build context)
-COPY . /app/env
+# Install uv for fast dependency management
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    mv /root/.local/bin/uv /usr/local/bin/uv && \
+    mv /root/.local/bin/uvx /usr/local/bin/uvx
 
-# For in-repo builds, openenv is already vendored in the build context
-# For standalone builds, openenv will be installed via pyproject.toml
-WORKDIR /app/env
-
-# Ensure uv is available (for local builds where base image lacks it)
-RUN if ! command -v uv >/dev/null 2>&1; then \
-        curl -LsSf https://astral.sh/uv/install.sh | sh && \
-        mv /root/.local/bin/uv /usr/local/bin/uv && \
-        mv /root/.local/bin/uvx /usr/local/bin/uvx; \
-    fi
-    
-# Install dependencies using uv sync
-# If uv.lock exists, use it; otherwise resolve on the fly
+# Synchronize dependencies into a local virtual environment
 RUN --mount=type=cache,target=/root/.cache/uv \
-    if [ -f uv.lock ]; then \
-        uv sync --frozen --no-install-project --no-editable; \
-    else \
-        uv sync --no-install-project --no-editable; \
-    fi
+    uv sync --no-editable
 
-RUN --mount=type=cache,target=/root/.cache/uv \
-    if [ -f uv.lock ]; then \
-        uv sync --frozen --no-editable; \
-    else \
-        uv sync --no-editable; \
-    fi
-
-# Final runtime stage
-FROM ${BASE_IMAGE}
-
-# Use /app as the base directory
-WORKDIR /app
-
-# Copy the virtual environment from builder
-COPY --from=builder /app/env/.venv /app/.venv
-
-# Copy the environment code
-COPY --from=builder /app/env /app/project
-
-# Set PATH to use the virtual environment
+# Set the virtual environment path
 ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONPATH="/app:$PYTHONPATH"
 
-# Set PYTHONPATH to include the project directory
-ENV PYTHONPATH="/app/project:$PYTHONPATH"
-
-# Ensure web UI dependencies are installed into the virtual environment in the final stage
-RUN /app/.venv/bin/pip install --upgrade "openenv-core[core,web]>=0.2.3" gradio jinja2 aiofiles
+# Ensure web UI dependencies are explicitly available
+RUN pip install --upgrade "openenv-core[core,web]>=0.2.3" gradio jinja2 aiofiles
 
 # Health check - use 127.0.0.1 to ensure it's internal
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://127.0.0.1:7860/health || exit 1
 
-# Run the FastAPI server using the venv python to ensure correct environment
-WORKDIR /app/project
-CMD ["/app/.venv/bin/python", "-m", "uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "7860"]
+# Run the FastAPI server directly from the root
+# Using the venv's python to ensure all dependencies are found
+CMD ["python", "-m", "uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "7860"]
