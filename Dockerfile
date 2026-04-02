@@ -62,19 +62,18 @@ WORKDIR /app
 # Copy the virtual environment from builder
 COPY --from=builder /app/env/.venv /app/.venv
 
-# Copy the environment code
-COPY --from=builder /app/env /app/env
+# Copy the environment code to /app/long_horizon_memory
+COPY --from=builder /app/env /app/long_horizon_memory
 
 # Set PATH to use the virtual environment
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Set PYTHONPATH so imports work correctly
-ENV PYTHONPATH="/app/env:$PYTHONPATH"
+# Set PYTHONPATH to include the project root
+ENV PYTHONPATH="/app/long_horizon_memory:$PYTHONPATH"
 
-# Health check
+# Health check - use 127.0.0.1 to ensure it's internal
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:7860/health || exit 1
+    CMD curl -f http://127.0.0.1:7860/health || exit 1
 
-# Run the FastAPI server
-# The module path is constructed to work with the /app/env structure
-CMD ["sh", "-c", "cd /app/env && uvicorn server.app:app --host 0.0.0.0 --port 7860"]
+# Run the FastAPI server from the project directory
+CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "7860"]

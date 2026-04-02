@@ -62,6 +62,12 @@ async def health_check():
     return {"status": "ok"}
 
 
+@app.get("/")
+async def root_redirect():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/web")
+
+
 @app.get("/routes")
 async def list_routes():
     return [{"path": route.path, "name": route.name} for route in app.routes]
