@@ -5,10 +5,12 @@ colorFrom: blue
 colorTo: green
 sdk: docker
 pinned: false
-app_port: 8000
+app_port: 7860
 base_path: /web
 tags:
   - openenv
+  - reinforcement-learning
+  - memory-management
 ---
 
 #  Long Horizon Memory Environment
