@@ -1,3 +1,17 @@
+---
+title: Long Horizon Memory Environment
+emoji: "🧠"
+colorFrom: blue
+colorTo: green
+sdk: docker
+pinned: false
+app_port: 7860
+tags:
+  - openenv
+  - reinforcement-learning
+  - memory-management
+  - context-retention
+---
 
 #  Long Horizon Memory Environment
 
